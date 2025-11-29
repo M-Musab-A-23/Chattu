@@ -118,6 +118,8 @@
         const [remoteCaption, setRemoteCaption] = useState("");
         const [captionsEnabled, setCaptionsEnabled] = useState(true);
         const [detectedLanguage, setDetectedLanguage] = useState("Detecting...");
+        const [localCaptionExpanded, setLocalCaptionExpanded] = useState(false);
+        const [remoteCaptionExpanded, setRemoteCaptionExpanded] = useState(false);
         
         // --- TRANSLATION STATE ---
         const [translationEnabled, setTranslationEnabled] = useState(false);
@@ -882,9 +884,25 @@
                       {/* Original Caption */}
                       <div className="flex items-start gap-2">
                         <i data-lucide="message-square" className="w-5 h-5 text-orange-500 mt-1 flex-shrink-0"></i>
-                        <p className="text-white text-left text-base md:text-lg leading-relaxed flex-1 caption-text">
-                          {remoteCaption}
-                        </p>
+                        <div className="flex-1">
+                          <p className={`text-white text-left text-base md:text-lg leading-relaxed caption-text`} style={remoteCaptionExpanded ? {} : {
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden'
+                          }}>
+                            {remoteCaption}
+                          </p>
+                          {remoteCaption.length > 100 && (
+                            <button
+                              onClick={() => setRemoteCaptionExpanded(!remoteCaptionExpanded)}
+                              className="text-orange-400 hover:text-orange-300 text-xs mt-1 flex items-center gap-1"
+                            >
+                              <i data-lucide={remoteCaptionExpanded ? "chevron-up" : "chevron-down"} className="w-3 h-3"></i>
+                              <span>{remoteCaptionExpanded ? 'Show less' : 'Show more'}</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
                       
                       {/* Translated Caption */}
@@ -933,7 +951,23 @@
                               🌍 {detectedLanguage}
                             </span>
                           </div>
-                          <p className="text-white text-sm md:text-base leading-relaxed caption-text">{localCaption}</p>
+                          <p className={`text-white text-sm md:text-base leading-relaxed caption-text`} style={localCaptionExpanded ? {} : {
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden'
+                          }}>
+                            {localCaption}
+                          </p>
+                          {localCaption.length > 80 && (
+                            <button
+                              onClick={() => setLocalCaptionExpanded(!localCaptionExpanded)}
+                              className="text-blue-400 hover:text-blue-300 text-xs mt-1 flex items-center gap-1"
+                            >
+                              <i data-lucide={localCaptionExpanded ? "chevron-up" : "chevron-down"} className="w-3 h-3"></i>
+                              <span>{localCaptionExpanded ? 'Show less' : 'Show more'}</span>
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
