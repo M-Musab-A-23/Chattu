@@ -90,6 +90,7 @@
         const currentCallRef = useRef(null);
         const isAutoJoining = useRef(false);
         const localStreamRef = useRef(null); // Store stream reference
+        const remoteStreamRef = useRef(null); // Store remote stream reference
 
         // --- 1. INITIALIZATION & RELIABLE SETUP ---
         useEffect(() => {
@@ -138,6 +139,74 @@
           return () => peer.destroy();
         }, []);
 
+        // Attach streams when status changes to connected
+        useEffect(() => {
+          if (status === "connected") {
+            console.log("📺 Status changed to connected, attaching streams to display elements");
+            
+            // Wait for React to render the video elements
+            setTimeout(() => {
+              // Attach local stream
+              const localDisplay = document.getElementById('localVideoDisplay');
+              if (localDisplay && localStreamRef.current) {
+                console.log("🎥 Attaching local stream to display");
+                localDisplay.srcObject = localStreamRef.current;
+                localDisplay.muted = true;
+                localDisplay.play().catch(e => console.error("Local display play error:", e));
+              }
+              
+              // Attach remote stream
+              const remoteDisplay = document.getElementById('remoteVideoDisplay');
+              if (remoteDisplay && remoteStreamRef.current) {
+                console.log("🎥 Attaching remote stream to display");
+                remoteDisplay.srcObject = remoteStreamRef.current;
+                remoteDisplay.muted = false;
+                remoteDisplay.volume = 1.0;
+                
+                // Try to play
+                const playPromise = remoteDisplay.play();
+                if (playPromise !== undefined) {
+                  playPromise
+                    .then(() => console.log("✅ Remote video playing successfully"))
+                    .catch((e) => {
+                      console.warn("⚠️ Autoplay blocked, showing click overlay");
+                      
+                      // Remove any existing overlay
+                      const existingOverlay = document.getElementById('click-overlay');
+                      if (existingOverlay) existingOverlay.remove();
+                      
+                      // Create overlay
+                      const overlay = document.createElement('div');
+                      overlay.id = 'click-overlay';
+                      overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:pointer;';
+                      overlay.innerHTML = '<div style="color:white;text-align:center;font-size:24px;"><p>🎥 Click anywhere to start video & audio</p><p style="font-size:16px;margin-top:10px;color:#ff5722;">Browser requires user interaction</p></div>';
+                      
+                      overlay.onclick = () => {
+                        console.log("🖱️ User clicked overlay");
+                        const remote = document.getElementById('remoteVideoDisplay');
+                        if (remote && remote.srcObject) {
+                          remote.play()
+                            .then(() => {
+                              console.log("✅ Video playing after user click");
+                              overlay.remove();
+                            })
+                            .catch(err => {
+                              console.error("❌ Still can't play:", err);
+                              alert("Error playing video. Please refresh and try again.");
+                            });
+                        } else {
+                          console.error("❌ No video element or stream found");
+                        }
+                      };
+                      
+                      document.body.appendChild(overlay);
+                    });
+                }
+              }
+            }, 200);
+          }
+        }, [status]);
+
         // --- 2. LOGIC: HANDLE INCOMING CALL ---
         const handleIncomingCall = (call) => {
           console.log("📞 Incoming call received");
@@ -158,16 +227,6 @@
                 localVideoRef.current.muted = true;
                 localVideoRef.current.play().catch(e => console.error("Local play error:", e));
               }
-              
-              // Sync to display when connected
-              const syncLocalDisplay = () => {
-                const displayVideo = document.getElementById('localVideoDisplay');
-                if (displayVideo) {
-                  displayVideo.srcObject = stream;
-                  displayVideo.play().catch(e => console.error("Display play error:", e));
-                }
-              };
-              setTimeout(syncLocalDisplay, 100);
               
               console.log("📤 Answering call with stream");
               call.answer(stream);
@@ -227,6 +286,9 @@
             console.log("Remote audio tracks:", remoteStream.getAudioTracks());
             console.log("Remote video tracks:", remoteStream.getVideoTracks());
             
+            // Store the stream
+            remoteStreamRef.current = remoteStream;
+            
             // Attach to hidden ref video
             if (remoteVideoRef.current) {
               console.log("🎥 Attaching remote stream to ref video element");
@@ -236,39 +298,7 @@
               remoteVideoRef.current.play().catch(e => console.error("Ref play error:", e));
             }
             
-            // Also attach to visible display video when status changes
-            setTimeout(() => {
-              const displayVideo = document.getElementById('remoteVideoDisplay');
-              if (displayVideo) {
-                console.log("🎥 Attaching to display video element");
-                displayVideo.srcObject = remoteStream;
-                displayVideo.muted = false;
-                displayVideo.volume = 1.0;
-                
-                // Try to play, handle autoplay blocking gracefully
-                const playPromise = displayVideo.play();
-                if (playPromise !== undefined) {
-                  playPromise
-                    .then(() => console.log("✅ Remote video playing successfully"))
-                    .catch((e) => {
-                      console.warn("⚠️ Autoplay blocked, requiring user interaction:", e);
-                      // Show overlay requiring click
-                      const overlay = document.createElement('div');
-                      overlay.id = 'click-overlay';
-                      overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:pointer;';
-                      overlay.innerHTML = '<div style="color:white;text-align:center;font-size:24px;"><p>🎥 Click anywhere to start video & audio</p><p style="font-size:16px;margin-top:10px;color:#ff5722;">Browser requires user interaction</p></div>';
-                      overlay.onclick = () => {
-                        displayVideo.play().then(() => {
-                          console.log("✅ Video playing after user click");
-                          overlay.remove();
-                        });
-                      };
-                      document.body.appendChild(overlay);
-                    });
-                }
-              }
-            }, 100);
-            
+            // Change status to connected (this will render the video elements)
             setStatus("connected");
           });
 
