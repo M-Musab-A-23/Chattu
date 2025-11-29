@@ -186,12 +186,11 @@
           const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
           
           // Run multiple recognizers simultaneously for instant language switching
+          // Only English, Urdu, and Punjabi
           const SUPPORTED_LANGUAGES = [
             { code: 'ur-PK', name: 'Urdu' },
             { code: 'en-US', name: 'English' },
-            { code: 'pa-PK', name: 'Punjabi' },
-            { code: 'ar-SA', name: 'Arabic' },
-            { code: 'hi-IN', name: 'Hindi' }
+            { code: 'pa-PK', name: 'Punjabi' }
           ];
           
           const recognizers = [];
