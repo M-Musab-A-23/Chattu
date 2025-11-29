@@ -7,11 +7,11 @@
 
     <!-- React & PeerJS -->
     <script
-      src="https://unpkg.com/react@18/umd/react.development.js"
+      src="https://unpkg.com/react@18/umd/react.production.min.js"
       crossorigin
     ></script>
     <script
-      src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"
+      src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"
       crossorigin
     ></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -138,12 +138,22 @@
 
         // --- 2. LOGIC: HANDLE INCOMING CALL ---
         const handleIncomingCall = (call) => {
+          console.log("📞 Incoming call received");
           setStatus("connecting");
           navigator.mediaDevices
             .getUserMedia(MEDIA_CONSTRAINTS)
             .then((stream) => {
-              if (localVideoRef.current)
+              console.log("✅ Local stream started:", stream.getTracks());
+              console.log("Audio tracks:", stream.getAudioTracks());
+              console.log("Video tracks:", stream.getVideoTracks());
+              
+              if (localVideoRef.current) {
                 localVideoRef.current.srcObject = stream;
+                localVideoRef.current.muted = true; // Prevent echo
+                localVideoRef.current.play().catch(e => console.error("Local play error:", e));
+              }
+              
+              console.log("📤 Answering call with stream");
               call.answer(stream);
               setupCallEventHandlers(call);
             })
@@ -157,14 +167,23 @@
           peerInstance = peerRef.current
         ) => {
           if (!targetId || !peerInstance) return;
+          console.log("📞 Starting call to:", targetId);
           setStatus("connecting");
 
           navigator.mediaDevices
             .getUserMedia(MEDIA_CONSTRAINTS)
             .then((stream) => {
-              if (localVideoRef.current)
+              console.log("✅ Outgoing call - local stream:", stream.getTracks());
+              console.log("Audio tracks:", stream.getAudioTracks());
+              console.log("Video tracks:", stream.getVideoTracks());
+              
+              if (localVideoRef.current) {
                 localVideoRef.current.srcObject = stream;
+                localVideoRef.current.muted = true; // Prevent echo
+                localVideoRef.current.play().catch(e => console.error("Local play error:", e));
+              }
 
+              console.log("📤 Calling peer with stream");
               const call = peerInstance.call(targetId, stream);
               setupCallEventHandlers(call);
             })
@@ -172,21 +191,42 @@
         };
 
         const setupCallEventHandlers = (call) => {
+          console.log("🔧 Setting up call event handlers");
+          
           call.on("stream", (remoteStream) => {
+            console.log("📥 Remote stream received!");
+            console.log("Remote tracks:", remoteStream.getTracks());
+            console.log("Remote audio tracks:", remoteStream.getAudioTracks());
+            console.log("Remote video tracks:", remoteStream.getVideoTracks());
+            
             if (remoteVideoRef.current) {
+              console.log("🎥 Attaching remote stream to video element");
               remoteVideoRef.current.srcObject = remoteStream;
+              remoteVideoRef.current.muted = false; // We want to hear them
+              remoteVideoRef.current.volume = 1.0;
+              
               remoteVideoRef.current
                 .play()
-                .catch((e) => console.error("Auto-play blocked", e));
+                .then(() => console.log("✅ Remote video playing successfully"))
+                .catch((e) => {
+                  console.error("❌ Remote video autoplay blocked:", e);
+                  alert("Click anywhere to enable audio/video");
+                });
+            } else {
+              console.error("❌ remoteVideoRef is null!");
             }
             setStatus("connected");
           });
 
           call.on("close", () => {
+            console.log("📴 Call closed");
             setStatus("idle");
             if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+            if (localVideoRef.current && localVideoRef.current.srcObject) {
+              localVideoRef.current.srcObject.getTracks().forEach(t => t.stop());
+              localVideoRef.current.srcObject = null;
+            }
             alert("Call ended by remote user.");
-            // Clean URL if we were auto-joined so we don't loop
             window.history.replaceState(
               {},
               document.title,
@@ -195,16 +235,31 @@
           });
 
           call.on("error", (e) => {
-            console.error("Call error:", e);
+            console.error("❌ Call error:", e);
             setStatus("error");
+            setErrorMsg("Call error: " + e.message);
           });
 
           currentCallRef.current = call;
         };
 
         const handleMediaError = (err) => {
-          console.error(err);
-          setErrorMsg("Could not access Camera/Mic. Please allow permissions.");
+          console.error("❌ Media Error:", err);
+          console.error("Error name:", err.name);
+          console.error("Error message:", err.message);
+          
+          let errorMessage = "Could not access Camera/Mic. ";
+          if (err.name === "NotAllowedError") {
+            errorMessage += "Please allow camera and microphone permissions.";
+          } else if (err.name === "NotFoundError") {
+            errorMessage += "No camera or microphone found.";
+          } else if (err.name === "NotReadableError") {
+            errorMessage += "Camera/mic already in use by another app.";
+          } else {
+            errorMessage += err.message;
+          }
+          
+          setErrorMsg(errorMessage);
           setStatus("error");
         };
 
