@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Milestone 1: Video Call</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📹</text></svg>" />
 
     <!-- React & PeerJS -->
     <script
@@ -243,15 +244,28 @@
                 displayVideo.srcObject = remoteStream;
                 displayVideo.muted = false;
                 displayVideo.volume = 1.0;
-                displayVideo.play()
-                  .then(() => console.log("✅ Remote video playing successfully"))
-                  .catch((e) => {
-                    console.error("❌ Remote video autoplay blocked:", e);
-                    document.body.onclick = () => {
-                      displayVideo?.play();
-                      document.body.onclick = null;
-                    };
-                  });
+                
+                // Try to play, handle autoplay blocking gracefully
+                const playPromise = displayVideo.play();
+                if (playPromise !== undefined) {
+                  playPromise
+                    .then(() => console.log("✅ Remote video playing successfully"))
+                    .catch((e) => {
+                      console.warn("⚠️ Autoplay blocked, requiring user interaction:", e);
+                      // Show overlay requiring click
+                      const overlay = document.createElement('div');
+                      overlay.id = 'click-overlay';
+                      overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:pointer;';
+                      overlay.innerHTML = '<div style="color:white;text-align:center;font-size:24px;"><p>🎥 Click anywhere to start video & audio</p><p style="font-size:16px;margin-top:10px;color:#ff5722;">Browser requires user interaction</p></div>';
+                      overlay.onclick = () => {
+                        displayVideo.play().then(() => {
+                          console.log("✅ Video playing after user click");
+                          overlay.remove();
+                        });
+                      };
+                      document.body.appendChild(overlay);
+                    });
+                }
               }
             }, 100);
             
@@ -420,6 +434,9 @@
                           <p className="text-sm text-gray-400">
                             Send this magic link to your friend. They will
                             auto-join when they click it.
+                          </p>
+                          <p className="text-xs text-yellow-600 bg-yellow-900/20 p-2 rounded border border-yellow-800">
+                            ⚠️ Testing on same device? Use different browsers (Chrome + Firefox) or send link to another person.
                           </p>
                           <button
                             onClick={copyInviteLink}
