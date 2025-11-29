@@ -179,177 +179,174 @@
 
           const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
           
-          // Multi-language support - common languages in Pakistan/South Asia
+          // Run multiple recognizers simultaneously for instant language switching
           const SUPPORTED_LANGUAGES = [
             { code: 'ur-PK', name: 'Urdu' },
             { code: 'en-US', name: 'English' },
             { code: 'pa-PK', name: 'Punjabi' },
             { code: 'ar-SA', name: 'Arabic' },
-            { code: 'hi-IN', name: 'Hindi' },
-            { code: 'ps-AF', name: 'Pashto' },
-            { code: 'sd-PK', name: 'Sindhi' }
+            { code: 'hi-IN', name: 'Hindi' }
           ];
           
-          let currentLangIndex = 0;
-          let noSpeechCount = 0;
-          let lastSuccessfulLang = null;
+          const recognizers = [];
+          let finalSentences = [];
+          let currentLanguage = 'Detecting...';
           
-          const createRecognition = (langCode) => {
+          // Create a recognizer for each language
+          SUPPORTED_LANGUAGES.forEach((lang, index) => {
             const recognition = new SpeechRecognition();
             recognition.continuous = true;
             recognition.interimResults = true;
-            recognition.lang = langCode;
-            recognition.maxAlternatives = 3;
-            return recognition;
-          };
-          
-          let recognition = createRecognition(SUPPORTED_LANGUAGES[currentLangIndex].code);
-          setDetectedLanguage(SUPPORTED_LANGUAGES[currentLangIndex].name);
-          console.log('🌍 Starting with language:', SUPPORTED_LANGUAGES[currentLangIndex].name);
-
-          let finalSentences = [];
-
-          recognition.onresult = (event) => {
-            // Speech detected - this language is working!
-            noSpeechCount = 0;
-            lastSuccessfulLang = currentLangIndex;
+            recognition.lang = lang.code;
+            recognition.maxAlternatives = 1;
             
-            let interimTranscript = '';
-            let finalTranscript = '';
+            recognition.onresult = (event) => {
+              let interimTranscript = '';
+              let finalTranscript = '';
+              let maxConfidence = 0;
 
-            for (let i = event.resultIndex; i < event.results.length; i++) {
-              const transcript = event.results[i][0].transcript;
-              const confidence = event.results[i][0].confidence;
-              
-              if (event.results[i].isFinal) {
-                finalTranscript += transcript;
-                finalSentences.push(transcript);
+              for (let i = event.resultIndex; i < event.results.length; i++) {
+                const result = event.results[i];
+                const transcript = result[0].transcript;
+                const confidence = result[0].confidence || 0.5;
                 
-                if (finalSentences.length > 3) {
-                  finalSentences.shift();
+                // Track highest confidence
+                if (confidence > maxConfidence) {
+                  maxConfidence = confidence;
                 }
                 
-                console.log('✅ Detected [' + SUPPORTED_LANGUAGES[currentLangIndex].name + ']:', transcript, '(confidence:', confidence + ')');
-                setDetectedLanguage(SUPPORTED_LANGUAGES[currentLangIndex].name);
-              } else {
-                interimTranscript += transcript;
+                if (result.isFinal) {
+                  finalTranscript += transcript;
+                  
+                  // Only accept if confidence is reasonable and this is the active language
+                  if (confidence > 0.3) {
+                    finalSentences.push(transcript);
+                    if (finalSentences.length > 3) {
+                      finalSentences.shift();
+                    }
+                    
+                    // Switch to this language
+                    currentLanguage = lang.name;
+                    setDetectedLanguage(lang.name);
+                    console.log('✅ [' + lang.name + ']:', transcript, '(confidence:', confidence + ')');
+                    
+                    // Stop other recognizers temporarily to give this one priority
+                    recognizers.forEach((rec, idx) => {
+                      if (idx !== index && rec.isRunning) {
+                        try {
+                          rec.recognition.stop();
+                          rec.isRunning = false;
+                        } catch (e) {}
+                      }
+                    });
+                    
+                    // Restart after a brief delay to allow language switching
+                    setTimeout(() => {
+                      recognizers.forEach((rec, idx) => {
+                        if (idx !== index && !rec.isRunning) {
+                          try {
+                            rec.recognition.start();
+                            rec.isRunning = true;
+                          } catch (e) {}
+                        }
+                      });
+                    }, 500);
+                  }
+                } else {
+                  interimTranscript += transcript;
+                }
               }
-            }
 
-            const displayText = [...finalSentences, interimTranscript].filter(t => t.trim()).join(' ');
-            setLocalCaption(displayText);
-
-            if (dataConnectionRef.current && dataConnectionRef.current.open) {
-              try {
-                dataConnectionRef.current.send({
-                  type: 'caption',
-                  text: displayText || ' ',
-                  isFinal: !!finalTranscript,
-                  timestamp: Date.now(),
-                  language: SUPPORTED_LANGUAGES[currentLangIndex].name
-                });
-                console.log('📤 Sent caption:', displayText.substring(0, 50) + '...');
-              } catch (e) {
-                console.error('Failed to send caption:', e);
+              // Update display with combined text
+              const displayText = [...finalSentences, interimTranscript].filter(t => t.trim()).join(' ');
+              
+              // Only update if this language has good confidence or is current language
+              if (maxConfidence > 0.3 || currentLanguage === lang.name) {
+                setLocalCaption(displayText);
+                
+                if (dataConnectionRef.current && dataConnectionRef.current.open) {
+                  try {
+                    dataConnectionRef.current.send({
+                      type: 'caption',
+                      text: displayText || ' ',
+                      isFinal: !!finalTranscript,
+                      timestamp: Date.now(),
+                      language: lang.name
+                    });
+                  } catch (e) {
+                    console.error('Failed to send caption:', e);
+                  }
+                }
               }
-            } else {
-              console.warn('⚠️ Data connection not open, cannot send caption');
-            }
-          };
-
-          recognition.onerror = (event) => {
-            console.error('Speech recognition error:', event.error);
+            };
             
-            if (event.error === 'no-speech') {
-              noSpeechCount++;
-              
-              // If no speech detected multiple times, try next language
-              if (noSpeechCount >= 2 && lastSuccessfulLang === null) {
-                currentLangIndex = (currentLangIndex + 1) % SUPPORTED_LANGUAGES.length;
-                const newLang = SUPPORTED_LANGUAGES[currentLangIndex];
-                
-                console.log('🔄 No speech detected, switching to:', newLang.name);
-                setDetectedLanguage('Trying ' + newLang.name + '...');
-                
-                try {
-                  recognition.stop();
-                } catch (e) {}
-                
+            recognition.onerror = (event) => {
+              if (event.error !== 'no-speech' && event.error !== 'aborted') {
+                console.error('[' + lang.name + '] Error:', event.error);
+              }
+            };
+            
+            recognition.onend = () => {
+              // Auto-restart this language recognizer
+              const rec = recognizers[index];
+              if (rec && status === 'connected' && captionsEnabled) {
                 setTimeout(() => {
-                  if (status === 'connected' && captionsEnabled) {
-                    recognition = createRecognition(newLang.code);
-                    setupRecognitionHandlers(recognition);
-                    try {
-                      recognition.start();
-                    } catch (e) {}
-                  }
-                }, 100);
-              } else {
-                // Restart with same language
-                setTimeout(() => {
-                  if (status === 'connected' && captionsEnabled) {
-                    try {
-                      recognition.start();
-                    } catch (e) {}
-                  }
+                  try {
+                    recognition.start();
+                    rec.isRunning = true;
+                  } catch (e) {}
                 }, 100);
               }
-            }
-          };
-
-          recognition.onend = () => {
-            if (status === 'connected' && captionsEnabled) {
-              // Use last successful language if found
-              if (lastSuccessfulLang !== null) {
-                currentLangIndex = lastSuccessfulLang;
-              }
-              
-              setTimeout(() => {
-                try {
-                  recognition.start();
-                  console.log('🔄 Restarted with:', SUPPORTED_LANGUAGES[currentLangIndex].name);
-                } catch (e) {}
-              }, 100);
-            }
-          };
+            };
+            
+            recognizers.push({
+              recognition,
+              language: lang,
+              isRunning: false
+            });
+          });
           
-          // Helper to setup handlers (for language switching)
-          const setupRecognitionHandlers = (rec) => {
-            rec.onresult = recognition.onresult;
-            rec.onerror = recognition.onerror;
-            rec.onend = recognition.onend;
-          };
+          console.log('🌍 Multi-language recognition initialized for instant switching');
 
-          recognitionRef.current = recognition;
+          // Store all recognizers for cleanup
+          recognitionRef.current = recognizers;
 
           return () => {
-            if (recognitionRef.current) {
+            recognizers.forEach(rec => {
               try {
-                recognitionRef.current.stop();
-              } catch (e) {
-                // Already stopped
-              }
-            }
+                rec.recognition.stop();
+              } catch (e) {}
+            });
           };
         }, []);
 
-        // Start/stop speech recognition based on connection status
+        // Start/stop ALL speech recognizers based on connection status
         useEffect(() => {
           if (status === 'connected' && captionsEnabled && recognitionRef.current) {
-            try {
-              recognitionRef.current.start();
-              console.log('🎤 Speech recognition started');
-            } catch (e) {
-              console.warn('Speech recognition already started or error:', e);
+            const recognizers = recognitionRef.current;
+            if (Array.isArray(recognizers)) {
+              recognizers.forEach(rec => {
+                try {
+                  rec.recognition.start();
+                  rec.isRunning = true;
+                  console.log('🎤 Started recognizer for:', rec.language.name);
+                } catch (e) {
+                  console.warn('Recognizer already started:', rec.language.name);
+                }
+              });
             }
           } else if (status !== 'connected' && recognitionRef.current) {
-            try {
-              recognitionRef.current.stop();
-              console.log('🎤 Speech recognition stopped');
-              setLocalCaption(''); // Clear captions when disconnected
-            } catch (e) {
-              // Already stopped
+            const recognizers = recognitionRef.current;
+            if (Array.isArray(recognizers)) {
+              recognizers.forEach(rec => {
+                try {
+                  rec.recognition.stop();
+                  rec.isRunning = false;
+                } catch (e) {}
+              });
             }
+            setLocalCaption('');
+            setDetectedLanguage('Detecting...');
           }
         }, [status, captionsEnabled]);
 
@@ -682,10 +679,13 @@
           
           // --- MILESTONE 2: Cleanup captions ---
           if (recognitionRef.current) {
-            try {
-              recognitionRef.current.stop();
-            } catch (e) {
-              // Already stopped
+            const recognizers = recognitionRef.current;
+            if (Array.isArray(recognizers)) {
+              recognizers.forEach(rec => {
+                try {
+                  rec.recognition.stop();
+                } catch (e) {}
+              });
             }
           }
           if (dataConnectionRef.current) {
