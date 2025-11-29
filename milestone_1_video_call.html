@@ -143,22 +143,29 @@
         useEffect(() => {
           if (status === "connected") {
             console.log("📺 Status changed to connected, attaching streams to display elements");
+            console.log("Local stream ref:", localStreamRef.current);
+            console.log("Remote stream ref:", remoteStreamRef.current);
             
             // Wait for React to render the video elements
             setTimeout(() => {
               // Attach local stream
               const localDisplay = document.getElementById('localVideoDisplay');
+              console.log("Local display element:", localDisplay);
               if (localDisplay && localStreamRef.current) {
                 console.log("🎥 Attaching local stream to display");
                 localDisplay.srcObject = localStreamRef.current;
                 localDisplay.muted = true;
                 localDisplay.play().catch(e => console.error("Local display play error:", e));
+              } else {
+                console.warn("⚠️ Missing local display or stream:", { localDisplay, stream: localStreamRef.current });
               }
               
               // Attach remote stream
               const remoteDisplay = document.getElementById('remoteVideoDisplay');
+              console.log("Remote display element:", remoteDisplay);
               if (remoteDisplay && remoteStreamRef.current) {
                 console.log("🎥 Attaching remote stream to display");
+                console.log("Remote stream tracks:", remoteStreamRef.current.getTracks());
                 remoteDisplay.srcObject = remoteStreamRef.current;
                 remoteDisplay.muted = false;
                 remoteDisplay.volume = 1.0;
@@ -202,6 +209,8 @@
                       document.body.appendChild(overlay);
                     });
                 }
+              } else {
+                console.error("❌ Missing remote display or stream:", { remoteDisplay, stream: remoteStreamRef.current });
               }
             }, 200);
           }
