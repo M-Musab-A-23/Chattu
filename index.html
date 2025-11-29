@@ -7,11 +7,11 @@
 
     <!-- React & PeerJS -->
     <script
-      src="https://unpkg.com/react@18/umd/react.development.js"
+      src="https://unpkg.com/react@18/umd/react.production.min.js"
       crossorigin
     ></script>
     <script
-      src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"
+      src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"
       crossorigin
     ></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -142,8 +142,11 @@
           navigator.mediaDevices
             .getUserMedia(MEDIA_CONSTRAINTS)
             .then((stream) => {
-              if (localVideoRef.current)
+              console.log("Local stream started:", stream.getTracks());
+              if (localVideoRef.current) {
                 localVideoRef.current.srcObject = stream;
+                localVideoRef.current.play();
+              }
               call.answer(stream);
               setupCallEventHandlers(call);
             })
@@ -162,8 +165,11 @@
           navigator.mediaDevices
             .getUserMedia(MEDIA_CONSTRAINTS)
             .then((stream) => {
-              if (localVideoRef.current)
+              console.log("Outgoing call - local stream:", stream.getTracks());
+              if (localVideoRef.current) {
                 localVideoRef.current.srcObject = stream;
+                localVideoRef.current.play();
+              }
 
               const call = peerInstance.call(targetId, stream);
               setupCallEventHandlers(call);
@@ -173,10 +179,13 @@
 
         const setupCallEventHandlers = (call) => {
           call.on("stream", (remoteStream) => {
+            console.log("Remote stream received:", remoteStream.getTracks());
             if (remoteVideoRef.current) {
               remoteVideoRef.current.srcObject = remoteStream;
+              remoteVideoRef.current.volume = 1.0;
               remoteVideoRef.current
                 .play()
+                .then(() => console.log("Remote video playing"))
                 .catch((e) => console.error("Auto-play blocked", e));
             }
             setStatus("connected");
