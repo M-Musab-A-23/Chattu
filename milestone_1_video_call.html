@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Milestone 1: Video Call</title>
+
+    <!-- React & PeerJS -->
+    <script
+      src="https://unpkg.com/react@18/umd/react.development.js"
+      crossorigin
+    ></script>
+    <script
+      src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"
+      crossorigin
+    ></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+      /* Minimalist "Orange & Black" Theme from Slide */
+      body {
+        background-color: #000000;
+        color: #ffffff;
+        font-family: "Inter", sans-serif;
+      }
+      .accent-text {
+        color: #ff5722;
+      } /* Deep Orange */
+      .accent-bg {
+        background-color: #ff5722;
+      }
+      .accent-border {
+        border-color: #ff5722;
+      }
+
+      .video-wrapper {
+        transition: all 0.5s ease;
+      }
+      /* Loading Spinner */
+      .loader {
+        border: 4px solid #333;
+        border-top: 4px solid #ff5722;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+      const { useState, useEffect, useRef } = React;
+
+      // --- MILESTONE 1: RELIABLE AV CONFIG ---
+      const MEDIA_CONSTRAINTS = {
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          facingMode: "user",
+        },
+        audio: { echoCancellation: true, noiseSuppression: true },
+      };
+
+      const App = () => {
+        const [myId, setMyId] = useState("");
+        const [status, setStatus] = useState("initializing"); // initializing, idle, connecting, connected, error, auto-joining
+        const [remoteIdInput, setRemoteIdInput] = useState("");
+        const [errorMsg, setErrorMsg] = useState("");
+        const [copySuccess, setCopySuccess] = useState(false);
+
+        const localVideoRef = useRef(null);
+        const remoteVideoRef = useRef(null);
+        const peerRef = useRef(null);
+        const currentCallRef = useRef(null);
+        const isAutoJoining = useRef(false);
+
+        // --- 1. INITIALIZATION & RELIABLE SETUP ---
+        useEffect(() => {
+          const peer = new Peer({ debug: 2 });
+
+          peer.on("open", (id) => {
+            setMyId(id);
+
+            // --- MAGIC LINK LOGIC ---
+            // Check if we were invited via URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const targetId = urlParams.get("call");
+
+            if (targetId) {
+              // We are the guest
+              setStatus("auto-joining");
+              setRemoteIdInput(targetId);
+              isAutoJoining.current = true;
+              // Slight delay to ensure PeerJS is fully ready
+              setTimeout(() => startCall(targetId, peer), 1000);
+            } else {
+              // We are the host
+              setStatus("idle");
+            }
+          });
+
+          peer.on("call", handleIncomingCall);
+
+          peer.on("error", (err) => {
+            console.error(err);
+            setStatus("error");
+            if (err.type === "peer-unavailable")
+              setErrorMsg("User not found. They might have closed the tab.");
+            else setErrorMsg("Connection error. Please refresh.");
+          });
+
+          peer.on("disconnected", () => {
+            // Only show disconnected if we aren't in error state
+            if (status !== "error") {
+              setStatus("disconnected");
+              peer.reconnect();
+            }
+          });
+
+          peerRef.current = peer;
+          return () => peer.destroy();
+        }, []);
+
+        // --- 2. LOGIC: HANDLE INCOMING CALL ---
+        const handleIncomingCall = (call) => {
+          setStatus("connecting");
+          navigator.mediaDevices
+            .getUserMedia(MEDIA_CONSTRAINTS)
+            .then((stream) => {
+              if (localVideoRef.current)
+                localVideoRef.current.srcObject = stream;
+              call.answer(stream);
+              setupCallEventHandlers(call);
+            })
+            .catch((err) => handleMediaError(err));
+        };
+
+        // --- 3. LOGIC: START OUTGOING CALL ---
+        // Modified to accept arguments for auto-joining
+        const startCall = (
+          targetId = remoteIdInput,
+          peerInstance = peerRef.current
+        ) => {
+          if (!targetId || !peerInstance) return;
+          setStatus("connecting");
+
+          navigator.mediaDevices
+            .getUserMedia(MEDIA_CONSTRAINTS)
+            .then((stream) => {
+              if (localVideoRef.current)
+                localVideoRef.current.srcObject = stream;
+
+              const call = peerInstance.call(targetId, stream);
+              setupCallEventHandlers(call);
+            })
+            .catch((err) => handleMediaError(err));
+        };
+
+        const setupCallEventHandlers = (call) => {
+          call.on("stream", (remoteStream) => {
+            if (remoteVideoRef.current) {
+              remoteVideoRef.current.srcObject = remoteStream;
+              remoteVideoRef.current
+                .play()
+                .catch((e) => console.error("Auto-play blocked", e));
+            }
+            setStatus("connected");
+          });
+
+          call.on("close", () => {
+            setStatus("idle");
+            if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+            alert("Call ended by remote user.");
+            // Clean URL if we were auto-joined so we don't loop
+            window.history.replaceState(
+              {},
+              document.title,
+              window.location.pathname
+            );
+          });
+
+          call.on("error", (e) => {
+            console.error("Call error:", e);
+            setStatus("error");
+          });
+
+          currentCallRef.current = call;
+        };
+
+        const handleMediaError = (err) => {
+          console.error(err);
+          setErrorMsg("Could not access Camera/Mic. Please allow permissions.");
+          setStatus("error");
+        };
+
+        const endCall = () => {
+          if (currentCallRef.current) currentCallRef.current.close();
+          if (localVideoRef.current && localVideoRef.current.srcObject) {
+            localVideoRef.current.srcObject
+              .getTracks()
+              .forEach((t) => t.stop());
+          }
+          setStatus("idle");
+          window.location.href = window.location.pathname;
+        };
+
+        // --- HELPERS ---
+        const copyInviteLink = () => {
+          const url = `${window.location.origin}${window.location.pathname}?call=${myId}`;
+          navigator.clipboard.writeText(url);
+          setCopySuccess(true);
+          setTimeout(() => setCopySuccess(false), 2000);
+        };
+
+        // --- 4. RENDER ---
+        return (
+          <div className="h-screen w-screen flex flex-col items-center justify-center overflow-hidden relative">
+            {/* STATUS BAR */}
+            <div className="absolute top-6 left-6 z-20 flex items-center gap-3">
+              <div
+                className={`w-3 h-3 rounded-full ${
+                  status === "connected" ? "bg-green-500" : "bg-red-500"
+                } ${status !== "idle" ? "animate-pulse" : ""}`}
+              ></div>
+              <span className="text-sm font-mono tracking-widest uppercase text-gray-400">
+                {status}
+              </span>
+            </div>
+
+            {/* ERROR TOAST */}
+            {status === "error" && (
+              <div className="absolute top-20 bg-red-900/80 border border-red-500 text-white px-6 py-3 rounded z-50 backdrop-blur-sm">
+                {errorMsg}
+              </div>
+            )}
+
+            {/* MAIN INTERFACE */}
+            {status === "connected" ? (
+              <div className="relative w-full h-full bg-zinc-900">
+                <video
+                  ref={remoteVideoRef}
+                  className="w-full h-full object-cover"
+                  autoPlay
+                  playsInline
+                />
+
+                <div className="absolute bottom-8 right-8 w-32 md:w-48 aspect-[9/16] md:aspect-video bg-black border border-gray-800 shadow-2xl rounded-lg overflow-hidden transition-all hover:scale-105">
+                  <video
+                    ref={localVideoRef}
+                    className="w-full h-full object-cover transform scale-x-[-1]"
+                    muted
+                    autoPlay
+                    playsInline
+                  />
+                </div>
+
+                <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 flex gap-4">
+                  <button
+                    onClick={endCall}
+                    className="bg-red-600 hover:bg-red-700 text-white p-4 rounded-full shadow-lg transition-all transform hover:scale-110"
+                  >
+                    <i data-lucide="phone-off"></i>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* LOBBY */
+              <div className="max-w-md w-full p-8 flex flex-col gap-8 z-10">
+                {status === "auto-joining" ? (
+                  <div className="flex flex-col items-center justify-center gap-6 text-center">
+                    <div className="loader"></div>
+                    <h2 className="text-2xl font-light">Joining Call...</h2>
+                    <p className="text-gray-500">
+                      Allow camera access when prompted
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <h1 className="text-5xl font-bold tracking-tighter text-white">
+                        Two-Person <br />
+                        <span className="accent-text">Video Call</span>
+                      </h1>
+                      <p className="text-gray-500">Share your link to start</p>
+                    </div>
+
+                    <div className="space-y-6">
+                      {/* Invite Block */}
+                      <div className="bg-zinc-900 p-6 rounded-xl border border-zinc-800 relative overflow-hidden group">
+                        <label className="text-xs text-accent-text uppercase tracking-wider block mb-3 font-bold">
+                          Invite Someone
+                        </label>
+                        <div className="flex flex-col gap-3">
+                          <p className="text-sm text-gray-400">
+                            Send this magic link to your friend. They will
+                            auto-join when they click it.
+                          </p>
+                          <button
+                            onClick={copyInviteLink}
+                            className={`w-full py-3 px-4 rounded font-mono text-sm border transition-all flex items-center justify-center gap-2 ${
+                              copySuccess
+                                ? "bg-green-900/30 border-green-500 text-green-400"
+                                : "bg-black border-zinc-700 hover:border-gray-500"
+                            }`}
+                          >
+                            {copySuccess ? (
+                              <i data-lucide="check" size={16} />
+                            ) : (
+                              <i data-lucide="link" size={16} />
+                            )}
+                            {copySuccess ? "Copied!" : "Copy Invite Link"}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Manual Join Block (Optional) */}
+                      <div className="space-y-4 pt-4 border-t border-zinc-800">
+                        <p className="text-xs text-gray-600 text-center uppercase tracking-widest">
+                          Or join manually
+                        </p>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="Enter their ID"
+                            value={remoteIdInput}
+                            onChange={(e) => setRemoteIdInput(e.target.value)}
+                            className="flex-1 bg-transparent border-b border-zinc-700 text-lg py-2 focus:outline-none focus:border-orange-500 transition-colors placeholder-zinc-800 font-mono"
+                          />
+                          <button
+                            onClick={() => startCall()}
+                            disabled={!remoteIdInput || status === "connecting"}
+                            className="accent-bg hover:bg-orange-600 disabled:opacity-50 text-white px-6 rounded-lg font-bold transition-colors"
+                          >
+                            Join
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      };
+
+      setTimeout(() => lucide.createIcons(), 100);
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(<App />);
+    </script>
+  </body>
+</html>
