@@ -274,29 +274,31 @@
               // Update display with combined text
               const displayText = [...finalSentences, interimTranscript].filter(t => t.trim()).join(' ');
               
-              // Auto-translate to English if speaking other language
-              if (autoTranslateToEnglish && lang.code !== 'en-US' && displayText && finalTranscript) {
-                translateText(displayText, 'en').then(englishText => {
-                  setLocalCaption(englishText);
-                  console.log('🌐 Auto-translated to English:', englishText);
-                  
-                  if (dataConnectionRef.current && dataConnectionRef.current.open) {
-                    try {
-                      dataConnectionRef.current.send({
-                        type: 'caption',
-                        text: englishText,
-                        isFinal: true,
-                        timestamp: Date.now(),
-                        language: 'English (Translated from ' + lang.name + ')'
-                      });
-                    } catch (e) {
-                      console.error('Failed to send caption:', e);
+              // Only update if this language has good confidence or is current language
+              if (maxConfidence > 0.3 || currentLanguage === lang.name) {
+                // Display captions in English or Urdu only (translate Punjabi to English)
+                if (lang.code === 'pa-PK' && displayText && finalTranscript) {
+                  // Punjabi detected - translate to English for display
+                  translateText(displayText, 'en').then(englishText => {
+                    setLocalCaption(englishText);
+                    console.log('🌐 Punjabi translated to English:', englishText);
+                    
+                    if (dataConnectionRef.current && dataConnectionRef.current.open) {
+                      try {
+                        dataConnectionRef.current.send({
+                          type: 'caption',
+                          text: englishText,
+                          isFinal: true,
+                          timestamp: Date.now(),
+                          language: 'English'
+                        });
+                      } catch (e) {
+                        console.error('Failed to send caption:', e);
+                      }
                     }
-                  }
-                });
-              } else {
-                // Only update if this language has good confidence or is current language
-                if (maxConfidence > 0.3 || currentLanguage === lang.name) {
+                  });
+                } else {
+                  // English or Urdu - display as-is
                   setLocalCaption(displayText);
                   
                   if (dataConnectionRef.current && dataConnectionRef.current.open) {
