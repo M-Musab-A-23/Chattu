@@ -100,10 +100,18 @@
 
       const App = () => {
         const [myId, setMyId] = useState("");
-        const [status, setStatus] = useState("initializing"); // initializing, idle, connecting, connected, error, auto-joining
+        const [status, setStatus] = useState("initializing"); // initializing, idle, connecting, connected, error, auto-joining, preview
         const [remoteIdInput, setRemoteIdInput] = useState("");
         const [errorMsg, setErrorMsg] = useState("");
         const [copySuccess, setCopySuccess] = useState(false);
+        
+        // --- PRE-CALL PREVIEW STATE ---
+        const [showPreview, setShowPreview] = useState(false);
+        const [previewStream, setPreviewStream] = useState(null);
+        const [cameraEnabled, setCameraEnabled] = useState(true);
+        const [micEnabled, setMicEnabled] = useState(true);
+        const [inviteId, setInviteId] = useState(null);
+        const previewVideoRef = useRef(null);
         
         // --- MILESTONE 2: CAPTIONS STATE ---
         const [localCaption, setLocalCaption] = useState("");
@@ -142,12 +150,12 @@
             const targetId = urlParams.get("call");
 
             if (targetId) {
-              // We are the guest
-              setStatus("auto-joining");
+              // We are the guest - show preview screen
+              setStatus("preview");
               setRemoteIdInput(targetId);
+              setInviteId(targetId);
+              setShowPreview(true);
               isAutoJoining.current = true;
-              // Slight delay to ensure PeerJS is fully ready
-              setTimeout(() => startCall(targetId, peer), 1000);
             } else {
               // We are the host
               setStatus("idle");
@@ -733,6 +741,86 @@
           }
         };
         
+        // --- PREVIEW SCREEN HELPERS ---
+        const startPreview = async () => {
+          try {
+            const constraints = {
+              video: cameraEnabled ? MEDIA_CONSTRAINTS.video : false,
+              audio: micEnabled ? MEDIA_CONSTRAINTS.audio : false
+            };
+            
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            setPreviewStream(stream);
+            
+            if (previewVideoRef.current && stream.getVideoTracks().length > 0) {
+              previewVideoRef.current.srcObject = stream;
+            }
+          } catch (err) {
+            console.error("Preview error:", err);
+            handleMediaError(err);
+          }
+        };
+        
+        const stopPreview = () => {
+          if (previewStream) {
+            previewStream.getTracks().forEach(track => track.stop());
+            setPreviewStream(null);
+          }
+          if (previewVideoRef.current) {
+            previewVideoRef.current.srcObject = null;
+          }
+        };
+        
+        const toggleCamera = async () => {
+          const newState = !cameraEnabled;
+          setCameraEnabled(newState);
+          
+          if (previewStream) {
+            const videoTrack = previewStream.getVideoTracks()[0];
+            if (videoTrack) {
+              videoTrack.enabled = newState;
+            }
+          }
+        };
+        
+        const toggleMic = async () => {
+          const newState = !micEnabled;
+          setMicEnabled(newState);
+          
+          if (previewStream) {
+            const audioTrack = previewStream.getAudioTracks()[0];
+            if (audioTrack) {
+              audioTrack.enabled = newState;
+            }
+          }
+        };
+        
+        const joinCall = () => {
+          stopPreview();
+          setShowPreview(false);
+          setStatus("auto-joining");
+          setTimeout(() => startCall(inviteId, peerRef.current), 500);
+        };
+        
+        const declineCall = () => {
+          stopPreview();
+          setShowPreview(false);
+          setStatus("idle");
+          window.location.href = window.location.pathname;
+        };
+        
+        // Start preview when preview screen is shown
+        useEffect(() => {
+          if (showPreview && status === 'preview') {
+            startPreview();
+          }
+          return () => {
+            if (showPreview) {
+              stopPreview();
+            }
+          };
+        }, [showPreview]);
+        
         // --- HELPERS ---
         const copyInviteLink = () => {
           const url = `${window.location.origin}${window.location.pathname}?call=${myId}`;
@@ -936,6 +1024,81 @@
                     </div>
                   </div>
                 )}
+              </div>
+            ) : status === "preview" ? (
+              /* PREVIEW SCREEN - Join Call Confirmation */
+              <div className="max-w-2xl w-full p-8 flex flex-col gap-6 z-10">
+                <div className="text-center space-y-2">
+                  <h1 className="text-4xl font-bold tracking-tighter text-white">
+                    Join <span className="accent-text">Video Call</span>
+                  </h1>
+                  <p className="text-gray-400">Setup your camera and microphone</p>
+                </div>
+
+                {/* Video Preview */}
+                <div className="relative w-full aspect-video bg-zinc-900 rounded-xl overflow-hidden border-2 border-gray-800 shadow-2xl">
+                  {cameraEnabled ? (
+                    <video
+                      ref={previewVideoRef}
+                      className="w-full h-full object-cover transform scale-x-[-1]"
+                      autoPlay
+                      playsInline
+                      muted
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-zinc-800">
+                      <div className="text-center">
+                        <i data-lucide="video-off" className="w-16 h-16 text-gray-500 mx-auto mb-3"></i>
+                        <p className="text-gray-400">Camera is off</p>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Controls Overlay */}
+                  <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-3">
+                    <button
+                      onClick={toggleCamera}
+                      className={`${cameraEnabled ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600 hover:bg-red-700'} text-white p-3 rounded-full transition-all`}
+                      title={cameraEnabled ? "Turn off camera" : "Turn on camera"}
+                    >
+                      <i data-lucide={cameraEnabled ? "video" : "video-off"} className="w-5 h-5"></i>
+                    </button>
+                    
+                    <button
+                      onClick={toggleMic}
+                      className={`${micEnabled ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600 hover:bg-red-700'} text-white p-3 rounded-full transition-all`}
+                      title={micEnabled ? "Mute microphone" : "Unmute microphone"}
+                    >
+                      <i data-lucide={micEnabled ? "mic" : "mic-off"} className="w-5 h-5"></i>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Join/Decline Buttons */}
+                <div className="flex gap-4">
+                  <button
+                    onClick={declineCall}
+                    className="flex-1 bg-gray-700 hover:bg-gray-600 text-white px-6 py-4 rounded-xl font-semibold transition-all flex items-center justify-center gap-2"
+                  >
+                    <i data-lucide="x" className="w-5 h-5"></i>
+                    Decline
+                  </button>
+                  
+                  <button
+                    onClick={joinCall}
+                    className="flex-1 accent-bg hover:bg-orange-600 text-white px-6 py-4 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 shadow-lg"
+                  >
+                    <i data-lucide="phone" className="w-5 h-5"></i>
+                    Join Call
+                  </button>
+                </div>
+
+                <p className="text-center text-sm text-gray-500">
+                  {cameraEnabled && micEnabled && "Ready to join with camera and mic"}
+                  {cameraEnabled && !micEnabled && "Ready to join with camera only"}
+                  {!cameraEnabled && micEnabled && "Ready to join with mic only"}
+                  {!cameraEnabled && !micEnabled && "Ready to join without camera and mic"}
+                </p>
               </div>
             ) : (
               /* LOBBY */
