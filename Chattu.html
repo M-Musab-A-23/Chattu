@@ -182,12 +182,13 @@
           recognition.continuous = true;
           recognition.interimResults = true;
           
-          // Auto-detect language based on browser or use navigator language
-          const userLang = navigator.language || navigator.userLanguage || 'en-US';
-          recognition.lang = userLang;
+          // Let speech recognition auto-detect the spoken language
+          // This detects actual speech, not browser settings
+          // Supports multiple languages: English, Urdu, Arabic, Hindi, etc.
+          recognition.lang = ''; // Empty means auto-detect from speech
           recognition.maxAlternatives = 3;
           
-          console.log('🌍 Speech recognition language set to:', userLang);
+          console.log('🌍 Speech recognition set to auto-detect spoken language');
 
           let finalSentences = [];
 
@@ -219,14 +220,21 @@
             const displayText = [...finalSentences, interimTranscript].filter(t => t.trim()).join(' ');
             setLocalCaption(displayText);
 
-            // Send immediately for real-time sync (send both interim and final)
-            if (displayText.trim() && dataConnectionRef.current && dataConnectionRef.current.open) {
-              dataConnectionRef.current.send({
-                type: 'caption',
-                text: displayText,
-                isFinal: !!finalTranscript,
-                timestamp: Date.now()
-              });
+            // Always send to keep connection alive and ensure continuous captions
+            if (dataConnectionRef.current && dataConnectionRef.current.open) {
+              try {
+                dataConnectionRef.current.send({
+                  type: 'caption',
+                  text: displayText || ' ', // Send space if empty to keep connection alive
+                  isFinal: !!finalTranscript,
+                  timestamp: Date.now()
+                });
+                console.log('📤 Sent caption:', displayText.substring(0, 50) + '...');
+              } catch (e) {
+                console.error('Failed to send caption:', e);
+              }
+            } else {
+              console.warn('⚠️ Data connection not open, cannot send caption');
             }
           };
 
@@ -545,14 +553,18 @@
             
             conn.on('open', () => {
               console.log('✅ Incoming data connection opened');
-              dataConnectionRef.current = conn;
+              // Store incoming connection (don't overwrite if we're also calling)
+              if (!dataConnectionRef.current || !dataConnectionRef.current.open) {
+                dataConnectionRef.current = conn;
+              }
             });
 
             conn.on('data', (data) => {
               console.log('📥 Received data from peer:', data);
-              if (data.type === 'caption') {
-                setRemoteCaption(data.text);
-                console.log('📝 Remote caption updated:', data.text);
+              if (data && data.type === 'caption') {
+                const caption = data.text || '';
+                setRemoteCaption(caption);
+                console.log('📝 Remote caption updated (', caption.length, 'chars):', caption.substring(0, 50));
               }
             });
 
@@ -563,6 +575,12 @@
 
             conn.on('error', (err) => {
               console.error('❌ Incoming data connection error:', err);
+              // Try to reconnect
+              setTimeout(() => {
+                if (status === 'connected' && conn.peer) {
+                  console.log('🔄 Attempting to reconnect data channel...');
+                }
+              }, 1000);
             });
           };
 
