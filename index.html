@@ -88,6 +88,7 @@
         const peerRef = useRef(null);
         const currentCallRef = useRef(null);
         const isAutoJoining = useRef(false);
+        const localStreamRef = useRef(null); // Store stream reference
 
         // --- 1. INITIALIZATION & RELIABLE SETUP ---
         useEffect(() => {
@@ -140,6 +141,8 @@
         const handleIncomingCall = (call) => {
           console.log("📞 Incoming call received");
           setStatus("connecting");
+          
+          // Get media first, THEN change status to connected
           navigator.mediaDevices
             .getUserMedia(MEDIA_CONSTRAINTS)
             .then((stream) => {
@@ -147,11 +150,23 @@
               console.log("Audio tracks:", stream.getAudioTracks());
               console.log("Video tracks:", stream.getVideoTracks());
               
+              localStreamRef.current = stream;
+              
               if (localVideoRef.current) {
                 localVideoRef.current.srcObject = stream;
-                localVideoRef.current.muted = true; // Prevent echo
+                localVideoRef.current.muted = true;
                 localVideoRef.current.play().catch(e => console.error("Local play error:", e));
               }
+              
+              // Sync to display when connected
+              const syncLocalDisplay = () => {
+                const displayVideo = document.getElementById('localVideoDisplay');
+                if (displayVideo) {
+                  displayVideo.srcObject = stream;
+                  displayVideo.play().catch(e => console.error("Display play error:", e));
+                }
+              };
+              setTimeout(syncLocalDisplay, 100);
               
               console.log("📤 Answering call with stream");
               call.answer(stream);
@@ -177,11 +192,23 @@
               console.log("Audio tracks:", stream.getAudioTracks());
               console.log("Video tracks:", stream.getVideoTracks());
               
+              localStreamRef.current = stream;
+              
               if (localVideoRef.current) {
                 localVideoRef.current.srcObject = stream;
-                localVideoRef.current.muted = true; // Prevent echo
+                localVideoRef.current.muted = true;
                 localVideoRef.current.play().catch(e => console.error("Local play error:", e));
               }
+              
+              // Sync to display when connected
+              const syncLocalDisplay = () => {
+                const displayVideo = document.getElementById('localVideoDisplay');
+                if (displayVideo) {
+                  displayVideo.srcObject = stream;
+                  displayVideo.play().catch(e => console.error("Display play error:", e));
+                }
+              };
+              setTimeout(syncLocalDisplay, 100);
 
               console.log("📤 Calling peer with stream");
               const call = peerInstance.call(targetId, stream);
@@ -199,22 +226,35 @@
             console.log("Remote audio tracks:", remoteStream.getAudioTracks());
             console.log("Remote video tracks:", remoteStream.getVideoTracks());
             
+            // Attach to hidden ref video
             if (remoteVideoRef.current) {
-              console.log("🎥 Attaching remote stream to video element");
+              console.log("🎥 Attaching remote stream to ref video element");
               remoteVideoRef.current.srcObject = remoteStream;
-              remoteVideoRef.current.muted = false; // We want to hear them
+              remoteVideoRef.current.muted = false;
               remoteVideoRef.current.volume = 1.0;
-              
-              remoteVideoRef.current
-                .play()
-                .then(() => console.log("✅ Remote video playing successfully"))
-                .catch((e) => {
-                  console.error("❌ Remote video autoplay blocked:", e);
-                  alert("Click anywhere to enable audio/video");
-                });
-            } else {
-              console.error("❌ remoteVideoRef is null!");
+              remoteVideoRef.current.play().catch(e => console.error("Ref play error:", e));
             }
+            
+            // Also attach to visible display video when status changes
+            setTimeout(() => {
+              const displayVideo = document.getElementById('remoteVideoDisplay');
+              if (displayVideo) {
+                console.log("🎥 Attaching to display video element");
+                displayVideo.srcObject = remoteStream;
+                displayVideo.muted = false;
+                displayVideo.volume = 1.0;
+                displayVideo.play()
+                  .then(() => console.log("✅ Remote video playing successfully"))
+                  .catch((e) => {
+                    console.error("❌ Remote video autoplay blocked:", e);
+                    document.body.onclick = () => {
+                      displayVideo?.play();
+                      document.body.onclick = null;
+                    };
+                  });
+              }
+            }, 100);
+            
             setStatus("connected");
           });
 
@@ -265,11 +305,19 @@
 
         const endCall = () => {
           if (currentCallRef.current) currentCallRef.current.close();
-          if (localVideoRef.current && localVideoRef.current.srcObject) {
-            localVideoRef.current.srcObject
-              .getTracks()
-              .forEach((t) => t.stop());
+          
+          // Stop all tracks
+          if (localStreamRef.current) {
+            localStreamRef.current.getTracks().forEach((t) => t.stop());
+            localStreamRef.current = null;
           }
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = null;
+          }
+          if (remoteVideoRef.current) {
+            remoteVideoRef.current.srcObject = null;
+          }
+          
           setStatus("idle");
           window.location.href = window.location.pathname;
         };
@@ -285,6 +333,10 @@
         // --- 4. RENDER ---
         return (
           <div className="h-screen w-screen flex flex-col items-center justify-center overflow-hidden relative">
+            {/* Hidden video elements - always present for refs */}
+            <video ref={localVideoRef} className="hidden" muted autoPlay playsInline />
+            <video ref={remoteVideoRef} className="hidden" autoPlay playsInline />
+            
             {/* STATUS BAR */}
             <div className="absolute top-6 left-6 z-20 flex items-center gap-3">
               <div
@@ -307,20 +359,24 @@
             {/* MAIN INTERFACE */}
             {status === "connected" ? (
               <div className="relative w-full h-full bg-zinc-900">
+                {/* Remote video - full screen */}
                 <video
-                  ref={remoteVideoRef}
+                  id="remoteVideoDisplay"
                   className="w-full h-full object-cover"
                   autoPlay
                   playsInline
+                  controls={false}
                 />
 
+                {/* Local video - picture in picture */}
                 <div className="absolute bottom-8 right-8 w-32 md:w-48 aspect-[9/16] md:aspect-video bg-black border border-gray-800 shadow-2xl rounded-lg overflow-hidden transition-all hover:scale-105">
                   <video
-                    ref={localVideoRef}
+                    id="localVideoDisplay"
                     className="w-full h-full object-cover transform scale-x-[-1]"
                     muted
                     autoPlay
                     playsInline
+                    controls={false}
                   />
                 </div>
 
