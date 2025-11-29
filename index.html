@@ -938,41 +938,42 @@
                   </div>
                 )}
 
-                <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 flex gap-4">
+                <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 flex gap-3 flex-wrap justify-center">
                   {/* MILESTONE 2: Toggle Captions Button */}
                   <button
                     onClick={() => setCaptionsEnabled(!captionsEnabled)}
-                    className={`${captionsEnabled ? 'bg-orange-600 hover:bg-orange-700' : 'bg-gray-600 hover:bg-gray-700'} text-white p-4 rounded-full shadow-lg transition-all transform hover:scale-110`}
-                    title={captionsEnabled ? "Disable Captions" : "Enable Captions"}
+                    className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-3 rounded-lg shadow-lg transition-all flex items-center gap-2 border border-zinc-700"
                   >
-                    <i data-lucide={captionsEnabled ? "captions" : "captions-off"}></i>
+                    <i data-lucide={captionsEnabled ? "captions" : "captions-off"} className="w-4 h-4"></i>
+                    <span className="text-sm font-medium">{captionsEnabled ? "Hide Captions" : "Show Captions"}</span>
                   </button>
                   
                   {/* Translation Toggle Button */}
                   <button
                     onClick={() => setTranslationEnabled(!translationEnabled)}
-                    className={`${translationEnabled ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-600 hover:bg-gray-700'} text-white p-4 rounded-full shadow-lg transition-all transform hover:scale-110 relative`}
-                    title={translationEnabled ? "Disable Translation" : "Enable Translation"}
+                    className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-3 rounded-lg shadow-lg transition-all flex items-center gap-2 border border-zinc-700"
                   >
-                    <i data-lucide="languages"></i>
+                    <i data-lucide="languages" className="w-4 h-4"></i>
+                    <span className="text-sm font-medium">{translationEnabled ? "Disable Translation" : "Enable Translation"}</span>
                   </button>
                   
                   {/* Language Selection Button */}
                   {translationEnabled && (
                     <button
                       onClick={() => setShowLanguageMenu(!showLanguageMenu)}
-                      className="bg-purple-600 hover:bg-purple-700 text-white p-4 rounded-full shadow-lg transition-all transform hover:scale-110"
-                      title="Select Language"
+                      className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-3 rounded-lg shadow-lg transition-all flex items-center gap-2 border border-zinc-700"
                     >
-                      <i data-lucide="globe"></i>
+                      <i data-lucide="globe" className="w-4 h-4"></i>
+                      <span className="text-sm font-medium">Select Language</span>
                     </button>
                   )}
                   
                   <button
                     onClick={endCall}
-                    className="bg-red-600 hover:bg-red-700 text-white p-4 rounded-full shadow-lg transition-all transform hover:scale-110"
+                    className="bg-red-600 hover:bg-red-700 text-white px-4 py-3 rounded-lg shadow-lg transition-all flex items-center gap-2"
                   >
-                    <i data-lucide="phone-off"></i>
+                    <i data-lucide="phone-off" className="w-4 h-4"></i>
+                    <span className="text-sm font-medium">End Call</span>
                   </button>
                 </div>
                 
@@ -1059,18 +1060,18 @@
                   <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-3">
                     <button
                       onClick={toggleCamera}
-                      className={`${cameraEnabled ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600 hover:bg-red-700'} text-white p-3 rounded-full transition-all`}
-                      title={cameraEnabled ? "Turn off camera" : "Turn on camera"}
+                      className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2 rounded-lg transition-all flex items-center gap-2 border border-zinc-700"
                     >
-                      <i data-lucide={cameraEnabled ? "video" : "video-off"} className="w-5 h-5"></i>
+                      <i data-lucide={cameraEnabled ? "video" : "video-off"} className="w-4 h-4"></i>
+                      <span className="text-sm font-medium">{cameraEnabled ? "Turn Off Camera" : "Turn On Camera"}</span>
                     </button>
                     
                     <button
                       onClick={toggleMic}
-                      className={`${micEnabled ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-600 hover:bg-red-700'} text-white p-3 rounded-full transition-all`}
-                      title={micEnabled ? "Mute microphone" : "Unmute microphone"}
+                      className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2 rounded-lg transition-all flex items-center gap-2 border border-zinc-700"
                     >
-                      <i data-lucide={micEnabled ? "mic" : "mic-off"} className="w-5 h-5"></i>
+                      <i data-lucide={micEnabled ? "mic" : "mic-off"} className="w-4 h-4"></i>
+                      <span className="text-sm font-medium">{micEnabled ? "Mute Mic" : "Unmute Mic"}</span>
                     </button>
                   </div>
                 </div>
@@ -1079,18 +1080,18 @@
                 <div className="flex gap-4">
                   <button
                     onClick={declineCall}
-                    className="flex-1 bg-gray-700 hover:bg-gray-600 text-white px-6 py-4 rounded-xl font-semibold transition-all flex items-center justify-center gap-2"
+                    className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white px-6 py-4 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 border border-zinc-700"
                   >
                     <i data-lucide="x" className="w-5 h-5"></i>
-                    Decline
+                    <span>Decline Call</span>
                   </button>
                   
                   <button
                     onClick={joinCall}
-                    className="flex-1 accent-bg hover:bg-orange-600 text-white px-6 py-4 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 shadow-lg"
+                    className="flex-1 bg-orange-600 hover:bg-orange-700 text-white px-6 py-4 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 shadow-lg"
                   >
                     <i data-lucide="phone" className="w-5 h-5"></i>
-                    Join Call
+                    <span>Join Call</span>
                   </button>
                 </div>
 
@@ -1138,18 +1139,18 @@
                           </p>
                           <button
                             onClick={copyInviteLink}
-                            className={`w-full py-3 px-4 rounded font-mono text-sm border transition-all flex items-center justify-center gap-2 ${
+                            className={`w-full py-3 px-4 rounded-lg font-semibold text-sm border transition-all flex items-center justify-center gap-2 ${
                               copySuccess
-                                ? "bg-green-900/30 border-green-500 text-green-400"
-                                : "bg-black border-zinc-700 hover:border-gray-500"
+                                ? "bg-green-600 border-green-600 text-white"
+                                : "bg-zinc-800 border-zinc-700 hover:bg-zinc-700 text-white"
                             }`}
                           >
                             {copySuccess ? (
-                              <i data-lucide="check" size={16} />
+                              <i data-lucide="check" className="w-4 h-4" />
                             ) : (
-                              <i data-lucide="link" size={16} />
+                              <i data-lucide="link" className="w-4 h-4" />
                             )}
-                            {copySuccess ? "Copied!" : "Copy Invite Link"}
+                            <span>{copySuccess ? "Link Copied!" : "Copy Invite Link"}</span>
                           </button>
                         </div>
                       </div>
@@ -1170,9 +1171,10 @@
                           <button
                             onClick={() => startCall()}
                             disabled={!remoteIdInput || status === "connecting"}
-                            className="accent-bg hover:bg-orange-600 disabled:opacity-50 text-white px-6 rounded-lg font-bold transition-colors"
+                            className="bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white px-6 rounded-lg font-bold transition-colors flex items-center gap-2"
                           >
-                            Join
+                            <i data-lucide="phone" className="w-4 h-4"></i>
+                            <span>Join Call</span>
                           </button>
                         </div>
                       </div>
