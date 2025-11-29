@@ -195,11 +195,10 @@
           const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
           
           // Run multiple recognizers simultaneously for instant language switching
-          // Only English, Urdu, and Punjabi
+          // Only English and Urdu
           const SUPPORTED_LANGUAGES = [
             { code: 'ur-PK', name: 'Urdu' },
-            { code: 'en-US', name: 'English' },
-            { code: 'pa-PK', name: 'Punjabi' }
+            { code: 'en-US', name: 'English' }
           ];
           
           const recognizers = [];
@@ -276,43 +275,20 @@
               
               // Only update if this language has good confidence or is current language
               if (maxConfidence > 0.3 || currentLanguage === lang.name) {
-                // Display captions in English or Urdu only (translate Punjabi to English)
-                if (lang.code === 'pa-PK' && displayText && finalTranscript) {
-                  // Punjabi detected - translate to English for display
-                  translateText(displayText, 'en').then(englishText => {
-                    setLocalCaption(englishText);
-                    console.log('🌐 Punjabi translated to English:', englishText);
-                    
-                    if (dataConnectionRef.current && dataConnectionRef.current.open) {
-                      try {
-                        dataConnectionRef.current.send({
-                          type: 'caption',
-                          text: englishText,
-                          isFinal: true,
-                          timestamp: Date.now(),
-                          language: 'English'
-                        });
-                      } catch (e) {
-                        console.error('Failed to send caption:', e);
-                      }
-                    }
-                  });
-                } else {
-                  // English or Urdu - display as-is
-                  setLocalCaption(displayText);
-                  
-                  if (dataConnectionRef.current && dataConnectionRef.current.open) {
-                    try {
-                      dataConnectionRef.current.send({
-                        type: 'caption',
-                        text: displayText || ' ',
-                        isFinal: !!finalTranscript,
-                        timestamp: Date.now(),
-                        language: lang.name
-                      });
-                    } catch (e) {
-                      console.error('Failed to send caption:', e);
-                    }
+                // English or Urdu - display as-is
+                setLocalCaption(displayText);
+                
+                if (dataConnectionRef.current && dataConnectionRef.current.open) {
+                  try {
+                    dataConnectionRef.current.send({
+                      type: 'caption',
+                      text: displayText || ' ',
+                      isFinal: !!finalTranscript,
+                      timestamp: Date.now(),
+                      language: lang.name
+                    });
+                  } catch (e) {
+                    console.error('Failed to send caption:', e);
                   }
                 }
               }
