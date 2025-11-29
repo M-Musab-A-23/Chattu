@@ -110,6 +110,12 @@
         const [remoteCaption, setRemoteCaption] = useState("");
         const [captionsEnabled, setCaptionsEnabled] = useState(true);
         const [detectedLanguage, setDetectedLanguage] = useState("Detecting...");
+        
+        // --- TRANSLATION STATE ---
+        const [translationEnabled, setTranslationEnabled] = useState(false);
+        const [targetLanguage, setTargetLanguage] = useState('en');
+        const [translatedCaption, setTranslatedCaption] = useState('');
+        const [showLanguageMenu, setShowLanguageMenu] = useState(false);
 
         const localVideoRef = useRef(null);
         const remoteVideoRef = useRef(null);
@@ -349,6 +355,17 @@
             setDetectedLanguage('Detecting...');
           }
         }, [status, captionsEnabled]);
+        
+        // Translate remote captions when translation is enabled
+        useEffect(() => {
+          if (translationEnabled && remoteCaption) {
+            translateText(remoteCaption, targetLanguage).then(translated => {
+              setTranslatedCaption(translated);
+            });
+          } else {
+            setTranslatedCaption('');
+          }
+        }, [remoteCaption, translationEnabled, targetLanguage]);
 
         // Attach streams when status changes to connected
         useEffect(() => {
@@ -699,6 +716,24 @@
           window.location.href = window.location.pathname;
         };
 
+        // --- TRANSLATION HELPER ---
+        const translateText = async (text, targetLang) => {
+          if (!text || !translationEnabled) return text;
+          
+          try {
+            const response = await fetch(
+              `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`
+            );
+            const data = await response.json();
+            const translated = data[0].map(item => item[0]).join('');
+            console.log('🌐 Translated:', text, '→', translated);
+            return translated;
+          } catch (error) {
+            console.error('Translation error:', error);
+            return text; // Return original if translation fails
+          }
+        };
+        
         // --- HELPERS ---
         const copyInviteLink = () => {
           const url = `${window.location.origin}${window.location.pathname}?call=${myId}`;
@@ -754,12 +789,26 @@
                 {captionsEnabled && remoteCaption && (
                   <div className="absolute bottom-20 left-0 right-0 px-4 md:px-8 z-20 caption-animate">
                     <div className="bg-black/90 backdrop-blur-md px-4 md:px-6 py-3 md:py-4 rounded-xl border-2 border-orange-500/70 shadow-2xl max-w-4xl mx-auto">
+                      {/* Original Caption */}
                       <div className="flex items-start gap-2">
                         <i data-lucide="message-square" className="w-5 h-5 text-orange-500 mt-1 flex-shrink-0"></i>
                         <p className="text-white text-left text-base md:text-lg leading-relaxed flex-1 caption-text">
                           {remoteCaption}
                         </p>
                       </div>
+                      
+                      {/* Translated Caption */}
+                      {translationEnabled && translatedCaption && translatedCaption !== remoteCaption && (
+                        <div className="flex items-start gap-2 mt-3 pt-3 border-t border-green-500/30">
+                          <i data-lucide="languages" className="w-5 h-5 text-green-400 mt-1 flex-shrink-0"></i>
+                          <div className="flex-1">
+                            <p className="text-green-400 text-xs font-semibold mb-1">Translation</p>
+                            <p className="text-white text-left text-base md:text-lg leading-relaxed caption-text">
+                              {translatedCaption}
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -811,6 +860,26 @@
                     <i data-lucide={captionsEnabled ? "captions" : "captions-off"}></i>
                   </button>
                   
+                  {/* Translation Toggle Button */}
+                  <button
+                    onClick={() => setTranslationEnabled(!translationEnabled)}
+                    className={`${translationEnabled ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-600 hover:bg-gray-700'} text-white p-4 rounded-full shadow-lg transition-all transform hover:scale-110 relative`}
+                    title={translationEnabled ? "Disable Translation" : "Enable Translation"}
+                  >
+                    <i data-lucide="languages"></i>
+                  </button>
+                  
+                  {/* Language Selection Button */}
+                  {translationEnabled && (
+                    <button
+                      onClick={() => setShowLanguageMenu(!showLanguageMenu)}
+                      className="bg-purple-600 hover:bg-purple-700 text-white p-4 rounded-full shadow-lg transition-all transform hover:scale-110"
+                      title="Select Language"
+                    >
+                      <i data-lucide="globe"></i>
+                    </button>
+                  )}
+                  
                   <button
                     onClick={endCall}
                     className="bg-red-600 hover:bg-red-700 text-white p-4 rounded-full shadow-lg transition-all transform hover:scale-110"
@@ -818,6 +887,56 @@
                     <i data-lucide="phone-off"></i>
                   </button>
                 </div>
+                
+                {/* Language Selection Menu */}
+                {showLanguageMenu && translationEnabled && (
+                  <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 bg-black/95 backdrop-blur-md rounded-xl border-2 border-purple-500/70 shadow-2xl p-4 max-h-96 overflow-y-auto z-30">
+                    <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
+                      <i data-lucide="globe" className="w-4 h-4"></i>
+                      Translate to:
+                    </h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { code: 'en', name: 'English', flag: '🇺🇸' },
+                        { code: 'ur', name: 'Urdu', flag: '🇵🇰' },
+                        { code: 'ar', name: 'Arabic', flag: '🇸🇦' },
+                        { code: 'zh-CN', name: 'Chinese', flag: '🇨🇳' },
+                        { code: 'es', name: 'Spanish', flag: '🇪🇸' },
+                        { code: 'fr', name: 'French', flag: '🇫🇷' },
+                        { code: 'de', name: 'German', flag: '🇩🇪' },
+                        { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
+                        { code: 'ko', name: 'Korean', flag: '🇰🇷' },
+                        { code: 'ru', name: 'Russian', flag: '🇷🇺' },
+                        { code: 'pt', name: 'Portuguese', flag: '🇧🇷' },
+                        { code: 'it', name: 'Italian', flag: '🇮🇹' },
+                        { code: 'hi', name: 'Hindi', flag: '🇮🇳' },
+                        { code: 'tr', name: 'Turkish', flag: '🇹🇷' },
+                        { code: 'nl', name: 'Dutch', flag: '🇳🇱' },
+                        { code: 'pl', name: 'Polish', flag: '🇵🇱' },
+                        { code: 'vi', name: 'Vietnamese', flag: '🇻🇳' },
+                        { code: 'th', name: 'Thai', flag: '🇹🇭' },
+                        { code: 'id', name: 'Indonesian', flag: '🇮🇩' },
+                        { code: 'ms', name: 'Malay', flag: '🇲🇾' },
+                        { code: 'fa', name: 'Persian', flag: '🇮🇷' },
+                        { code: 'bn', name: 'Bengali', flag: '🇧🇩' },
+                        { code: 'pa', name: 'Punjabi', flag: '🇵🇰' },
+                        { code: 'sw', name: 'Swahili', flag: '🇰🇪' }
+                      ].map(lang => (
+                        <button
+                          key={lang.code}
+                          onClick={() => {
+                            setTargetLanguage(lang.code);
+                            setShowLanguageMenu(false);
+                          }}
+                          className={`${targetLanguage === lang.code ? 'bg-purple-600' : 'bg-gray-700 hover:bg-gray-600'} text-white px-3 py-2 rounded-lg text-sm transition-all flex items-center gap-2`}
+                        >
+                          <span>{lang.flag}</span>
+                          <span>{lang.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               /* LOBBY */
