@@ -83,6 +83,11 @@
         const [remoteIdInput, setRemoteIdInput] = useState("");
         const [errorMsg, setErrorMsg] = useState("");
         const [copySuccess, setCopySuccess] = useState(false);
+        
+        // --- MILESTONE 2: CAPTIONS STATE ---
+        const [localCaption, setLocalCaption] = useState("");
+        const [remoteCaption, setRemoteCaption] = useState("");
+        const [captionsEnabled, setCaptionsEnabled] = useState(true);
 
         const localVideoRef = useRef(null);
         const remoteVideoRef = useRef(null);
@@ -91,6 +96,10 @@
         const isAutoJoining = useRef(false);
         const localStreamRef = useRef(null); // Store stream reference
         const remoteStreamRef = useRef(null); // Store remote stream reference
+        
+        // --- MILESTONE 2: SPEECH RECOGNITION ---
+        const recognitionRef = useRef(null);
+        const dataConnectionRef = useRef(null); // For sending captions
 
         // --- 1. INITIALIZATION & RELIABLE SETUP ---
         useEffect(() => {
@@ -138,6 +147,77 @@
           peerRef.current = peer;
           return () => peer.destroy();
         }, []);
+
+        // --- MILESTONE 2: INITIALIZE SPEECH RECOGNITION ---
+        useEffect(() => {
+          if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+            console.warn("Speech recognition not supported");
+            return;
+          }
+
+          const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+          const recognition = new SpeechRecognition();
+          
+          recognition.continuous = true;
+          recognition.interimResults = true;
+          recognition.lang = 'en-US';
+
+          recognition.onresult = (event) => {
+            let interimTranscript = '';
+            let finalTranscript = '';
+
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+              const transcript = event.results[i][0].transcript;
+              if (event.results[i].isFinal) {
+                finalTranscript += transcript + ' ';
+              } else {
+                interimTranscript += transcript;
+              }
+            }
+
+            const currentText = finalTranscript || interimTranscript;
+            setLocalCaption(currentText);
+
+            // Send caption to remote peer via data connection
+            if (dataConnectionRef.current && dataConnectionRef.current.open) {
+              dataConnectionRef.current.send({
+                type: 'caption',
+                text: currentText
+              });
+            }
+          };
+
+          recognition.onerror = (event) => {
+            console.error('Speech recognition error:', event.error);
+          };
+
+          recognitionRef.current = recognition;
+
+          return () => {
+            if (recognitionRef.current) {
+              recognitionRef.current.stop();
+            }
+          };
+        }, []);
+
+        // Start/stop speech recognition based on connection status
+        useEffect(() => {
+          if (status === 'connected' && captionsEnabled && recognitionRef.current) {
+            try {
+              recognitionRef.current.start();
+              console.log('🎤 Speech recognition started');
+            } catch (e) {
+              console.warn('Speech recognition already started');
+            }
+          } else if (status !== 'connected' && recognitionRef.current) {
+            try {
+              recognitionRef.current.stop();
+              console.log('🎤 Speech recognition stopped');
+            } catch (e) {
+              // Already stopped
+            }
+          }
+        }, [status, captionsEnabled]);
 
         // Attach streams when status changes to connected
         useEffect(() => {
@@ -240,6 +320,9 @@
               console.log("📤 Answering call with stream");
               call.answer(stream);
               setupCallEventHandlers(call);
+              
+              // --- MILESTONE 2: SETUP DATA CONNECTION FOR CAPTIONS (Answerer) ---
+              setupDataConnection(call.peer);
             })
             .catch((err) => handleMediaError(err));
         };
@@ -282,6 +365,9 @@
               console.log("📤 Calling peer with stream");
               const call = peerInstance.call(targetId, stream);
               setupCallEventHandlers(call);
+              
+              // --- MILESTONE 2: SETUP DATA CONNECTION FOR CAPTIONS (Caller) ---
+              setupDataConnection(targetId);
             })
             .catch((err) => handleMediaError(err));
         };
@@ -336,6 +422,53 @@
           currentCallRef.current = call;
         };
 
+        // --- MILESTONE 2: SETUP DATA CONNECTION FOR CAPTIONS ---
+        const setupDataConnection = (peerId) => {
+          if (!peerRef.current) return;
+
+          // Create data connection
+          const conn = peerRef.current.connect(peerId);
+          
+          conn.on('open', () => {
+            console.log('📡 Data connection opened');
+            dataConnectionRef.current = conn;
+          });
+
+          conn.on('data', (data) => {
+            if (data.type === 'caption') {
+              setRemoteCaption(data.text);
+            }
+          });
+
+          conn.on('error', (err) => {
+            console.error('Data connection error:', err);
+          });
+        };
+
+        // Handle incoming data connections from peer
+        useEffect(() => {
+          if (!peerRef.current) return;
+
+          peerRef.current.on('connection', (conn) => {
+            console.log('📡 Incoming data connection');
+            
+            conn.on('open', () => {
+              console.log('📡 Incoming data connection opened');
+              dataConnectionRef.current = conn;
+            });
+
+            conn.on('data', (data) => {
+              if (data.type === 'caption') {
+                setRemoteCaption(data.text);
+              }
+            });
+
+            conn.on('error', (err) => {
+              console.error('Incoming data connection error:', err);
+            });
+          });
+        }, []);
+
         const handleMediaError = (err) => {
           console.error("❌ Media Error:", err);
           console.error("Error name:", err.name);
@@ -370,6 +503,21 @@
           if (remoteVideoRef.current) {
             remoteVideoRef.current.srcObject = null;
           }
+          
+          // --- MILESTONE 2: Cleanup captions ---
+          if (recognitionRef.current) {
+            try {
+              recognitionRef.current.stop();
+            } catch (e) {
+              // Already stopped
+            }
+          }
+          if (dataConnectionRef.current) {
+            dataConnectionRef.current.close();
+            dataConnectionRef.current = null;
+          }
+          setLocalCaption("");
+          setRemoteCaption("");
           
           setStatus("idle");
           window.location.href = window.location.pathname;
@@ -426,6 +574,17 @@
                   Remote User
                 </div>
 
+                {/* MILESTONE 2: Remote Captions */}
+                {captionsEnabled && remoteCaption && (
+                  <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 max-w-3xl w-full px-4">
+                    <div className="bg-black/80 backdrop-blur-sm px-6 py-3 rounded-lg border border-orange-500/30">
+                      <p className="text-white text-center text-lg leading-relaxed">
+                        {remoteCaption}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Local video - picture in picture */}
                 <div className="absolute bottom-8 right-8 w-32 md:w-48 aspect-[9/16] md:aspect-video bg-black border border-gray-800 shadow-2xl rounded-lg overflow-hidden transition-all hover:scale-105">
                   <video
@@ -440,9 +599,27 @@
                   <div className="absolute top-2 right-2 bg-black/70 px-2 py-1 rounded text-white text-xs">
                     You
                   </div>
+                  
+                  {/* MILESTONE 2: Local Captions (on PIP video) */}
+                  {captionsEnabled && localCaption && (
+                    <div className="absolute bottom-2 left-2 right-2">
+                      <div className="bg-black/80 backdrop-blur-sm px-2 py-1 rounded text-white text-xs text-center border border-orange-500/30">
+                        {localCaption}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 flex gap-4">
+                  {/* MILESTONE 2: Toggle Captions Button */}
+                  <button
+                    onClick={() => setCaptionsEnabled(!captionsEnabled)}
+                    className={`${captionsEnabled ? 'bg-orange-600 hover:bg-orange-700' : 'bg-gray-600 hover:bg-gray-700'} text-white p-4 rounded-full shadow-lg transition-all transform hover:scale-110`}
+                    title={captionsEnabled ? "Disable Captions" : "Enable Captions"}
+                  >
+                    <i data-lucide={captionsEnabled ? "captions" : "captions-off"}></i>
+                  </button>
+                  
                   <button
                     onClick={endCall}
                     className="bg-red-600 hover:bg-red-700 text-white p-4 rounded-full shadow-lg transition-all transform hover:scale-110"
