@@ -420,6 +420,11 @@
                   playsInline
                   controls={false}
                 />
+                
+                {/* Label for remote video */}
+                <div className="absolute top-4 left-4 bg-black/70 px-3 py-1 rounded text-white text-sm">
+                  Remote User
+                </div>
 
                 {/* Local video - picture in picture */}
                 <div className="absolute bottom-8 right-8 w-32 md:w-48 aspect-[9/16] md:aspect-video bg-black border border-gray-800 shadow-2xl rounded-lg overflow-hidden transition-all hover:scale-105">
@@ -431,6 +436,10 @@
                     playsInline
                     controls={false}
                   />
+                  {/* Label for local video */}
+                  <div className="absolute top-2 left-2 bg-black/70 px-2 py-1 rounded text-white text-xs">
+                    You
+                  </div>
                 </div>
 
                 <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 flex gap-4">
